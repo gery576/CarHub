@@ -1,6 +1,5 @@
 <?php
 
-// app/Http/Controllers/UserController.php
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -8,6 +7,7 @@ use App\Models\User;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Mail;
 
 class UserController extends Controller
 {
@@ -113,6 +113,36 @@ class UserController extends Controller
         return view('users.edit', [
             'user' => $user
         ]);
+    }
+
+
+    public function sendPasswordReminder(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email'
+        ]);
+
+        $user = User::where('email', $request->email)->first();
+
+        if (!$user) {
+            return back()->with('error', 'Nem található felhasználó ezzel az email címmel.');
+        }
+
+        try {
+            Mail::raw(
+                "Tisztelt {$user->username}!\n\n" .
+                "Az Ön jelszava a CarHub Autókereskedés oldalán: {$user->password}\n\n" .
+                "Üdvözlettel,\nAutókereskedés csapata",
+                function($message) use ($user) {
+                    $message->to($user->email)
+                            ->subject('Jelszóemlékeztető - CarHub Autókereskedés');
+                }
+            );
+
+            return back()->with('success', 'A jelszóemlékeztetőt elküldtük az email címére.');
+        } catch (\Exception $e) {
+            return back()->with('error', 'Hiba történt az email küldése közben. Kérjük próbálja újra később.');
+        }
     }
 
     public function UpdateUser(Request $request, $id)

@@ -9,22 +9,20 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-  public function up()
-{
-    Schema::create('car_images', function (Blueprint $table) {
-        $table->id();
-        $table->foreignId('car_id')->constrained()->onDelete('cascade');
-        $table->string('filename');
-        $table->timestamps();
-    });
-}
-
+    public function up(): void
+    {
+        Schema::table('cars', function (Blueprint $table) {
+            $table->string('kep')->nullable()->after('extrak');
+        });
+    }
 
     /**
      * Reverse the migrations.
      */
     public function down(): void
     {
-        Schema::dropIfExists('car_images');
+        Schema::table('cars', function (Blueprint $table) {
+            $table->dropColumn('kep');
+        });
     }
 };

@@ -1,41 +1,42 @@
 <?php
 
-// app/Http/Controllers/CarController.php
 namespace App\Http\Controllers;
 
 use App\Models\Car;
+use App\Models\User;
+use App\Models\Brand;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class CarController extends Controller
 {
-    // Middleware-t most nem használok, majd később lehet visszateszem
-
     public function show(Car $car)
     {
         // Itt csak egy autót mutatunk meg
         return view('cars.show', ['car' => $car]);
     }
 
-    public function index(Request $request)
-    {
-        $query = Car::query();
+public function index(Request $request)
+{
+    $query = Car::query();
+    $brands = Brand::where('active', true)->orderBy('name')->get();
 
-        // Szűrés gyártóra
-        if ($request->has('marka') && $request->marka != '') {
-            $query->where('marka', $request->marka);
-        }
+    // Szűrés gyártóra
+    if ($request->has('marka') && $request->marka != '') {
+        $query->where('marka', $request->marka);
+    }
         // Modell szűrés
         if ($request->has('modell') && $request->modell != '') {
             $query->where('modell', 'like', '%' . $request->modell . '%');
         }
         // Évjárat szűrés
-        if ($request->has('evjarat_tol') && $request->evjarat_tol != '') {
-            $query->where('evjarat', '>=', $request->evjarat_tol);
-        }
-        if ($request->has('evjarat_ig') && $request->evjarat_ig != '') {
-            $query->where('evjarat', '<=', $request->evjarat_ig);
-        }
+        if ($request->has('evjarat_from') && $request->evjarat_from != '') {
+        $query->where('evjarat', '>=', $request->evjarat_from);
+    }
+    if ($request->has('evjarat_to') && $request->evjarat_to != '') {
+        $query->where('evjarat', '<=', $request->evjarat_to);
+    }
         // Ár szűrés
         if ($request->has('ar_tol') && $request->ar_tol != '') {
             $query->where('ar', '>=', $request->ar_tol);
@@ -74,84 +75,232 @@ class CarController extends Controller
             $query->where('uzemanyag', $request->uzemanyag);
         }
 
-        $cars = $query->orderBy('created_at', 'desc')->paginate(9);
+    $cars = $query->orderBy('created_at', 'desc')->paginate(9);
 
-        // Itt visszaadjuk a nézetet
-        return view('cars.index', ['cars' => $cars]);
+    return view('cars.index', [
+        'cars' => $cars,
+        'brands' => $brands
+    ]);
     }
 
-    public function create()
-    {
-        // Üzemanyag típusok listája
-        $uzemanyagTipusok = ['benzin', 'gázolaj', 'hibrid', 'elektromos', 'gázüzemű'];
-        return view('cars.create', ['uzemanyagTipusok' => $uzemanyagTipusok]);
-    }
+   public function create()
+{
+    // Aktív márkák lekérése
+    $brands = Brand::where('active', true)->orderBy('name')->get();
+    $uzemanyagTipusok = ['benzin', 'gázolaj', 'hibrid', 'elektromos', 'gázüzemű'];
 
+    return view('cars.create', [
+        'brands' => $brands,
+        'uzemanyagTipusok' => $uzemanyagTipusok
+    ]);
+}
     public function store(Request $request)
     {
         // Validáció
-        $request->validate([
-            'marka'      => 'required',
-            'modell'     => 'required',
-            'evjarat'    => 'required|integer|min:1900|max:' . date('Y'),
-            'ar'         => 'required|integer|min:100000',
-            'leiras'     => 'required|min:10',
-            'uzemanyag'  => 'required',
-            'images.*'   => 'image|max:2048'
-        ],[
+        $validated = $request->validate([
+            'marka' => 'required',
+            'modell' => 'required',
+            'evjarat' => 'required|integer|min:1900|max:' . date('Y'),
+            'ar' => 'required|integer|min:100000',
+            'km_ora' => 'required|integer|min:0',
+            'teljesitmeny' => 'required|integer|min:1',
+            'uzemanyag' => 'required',
+            'valto' => 'required',
+            'szin' => 'required',
+            'karosszeria' => 'required',
+            'leiras' => 'required|min:10',
+            'images.*' => 'image|max:2048'
+        ], [
             'marka.required' => 'A gyártó mező kötelező!',
             'modell.required' => 'A modell mező kötelező!',
             'evjarat.required' => 'Az évjárat mező kötelező!',
             'ar.required' => 'Az ár mező kötelező!',
-            'leiras.required' => 'A leírás mező kötelező!',
-            'uzemanyag.required' => 'Az üzemanyag mező kötelező!',
-            'leiras.min' => 'Legalább 10 karakter!',
             'ar.min' => 'Minimum 100 000 Ft!',
-            'images.*.image' => 'Csak kép lehet!',
-            'images.*.max' => 'Max 2 MB!'
+            'km_ora.required' => 'A kilométeróra állás kötelező!',
+            'teljesitmeny.required' => 'A teljesítmény kötelező!',
+            'uzemanyag.required' => 'Az üzemanyag típusa kötelező!',
+            'valto.required' => 'A váltó típusa kötelező!',
+            'szin.required' => 'A szín kötelező!',
+            'karosszeria.required' => 'A karosszéria típusa kötelező!',
+            'leiras.required' => 'A leírás kötelező!',
+            'leiras.min' => 'A leírás minimum 10 karakter!',
+            'images.*.image' => 'Csak képfájl tölthető fel!',
+            'images.*.max' => 'A kép maximum 2MB lehet!'
         ]);
 
-        // Extrák mentése
-        $extrak = '';
-        if ($request->has('extrak')) {
-            $extrak = implode(',', $request->extrak);
+        // Create storage directory if it doesn't exist
+        if (!Storage::exists('public/cars')) {
+            Storage::makeDirectory('public/cars');
         }
 
         // Autó mentése
         $car = new Car();
         $car->user_id = Auth::id();
-        $car->marka = $request->marka;
-        $car->modell = $request->modell;
-        $car->evjarat = $request->evjarat;
-        $car->ar = $request->ar;
-        $car->leiras = $request->leiras;
-        $car->uzemanyag = $request->uzemanyag;
-        $car->km_ora = $request->km_ora;
-        $car->teljesitmeny = $request->teljesitmeny;
-        $car->valto = $request->valto;
-        $car->szin = $request->szin;
-        $car->karosszeria = $request->karosszeria;
-        $car->extrak = $extrak;
-        $car->kep = null;
+        $brand = Brand::findOrFail($request->marka);
+$car->marka = $brand->name;
+        $car->modell = $validated['modell'];
+        $car->evjarat = $validated['evjarat'];
+        $car->ar = $validated['ar'];
+        $car->km_ora = $validated['km_ora'];
+        $car->teljesitmeny = $validated['teljesitmeny'];
+        $car->uzemanyag = $validated['uzemanyag'];
+        $car->valto = $validated['valto'];
+        $car->szin = $validated['szin'];
+        $car->karosszeria = $validated['karosszeria'];
+        $car->leiras = $validated['leiras'];
+
+        // Extrák mentése
+        if ($request->has('extrak')) {
+            $car->extrak = implode(',', $request->extrak);
+        }
+
         $car->save();
 
         // Képek mentése
         if ($request->hasFile('images')) {
-            $i = 0;
-            foreach ($request->file('images') as $kep) {
-                $path = $kep->store('cars', 'public');
+            foreach ($request->file('images') as $index => $image) {
+                $path = $image->store('cars', 'public');
                 $filename = basename($path);
 
-                if ($i == 0) {
+                // Kép mentése az autóhoz
+                $car->images()->create([
+                    'path' => $filename
+                ]);
+
+                // Első kép beállítása főképként
+                if ($index === 0) {
                     $car->kep = $filename;
                     $car->save();
                 }
-                $car->images()->create(['path' => $filename]);
-                $i++;
             }
         }
 
-        return view('success', ['message' => 'Autóhirdetés és képek feltöltve!']);
+        return redirect()
+            ->route('cars.show', $car)
+            ->with('success', 'Autóhirdetés sikeresen létrehozva!');
     }
+
+    public function edit(Car $car)
+    {
+        // Ellenőrizzük, hogy a felhasználó sajátja-e a hirdetés
+        if ($car->user_id !== auth()->id()) {
+        return redirect()->route('cars.index')->with('error', 'Nem módosíthatod más hirdetését!');
+    }
+
+    $brands = Brand::where('active', true)->orderBy('name')->get();
+
+    return view('cars.edit', [
+        'car' => $car,
+        'brands' => $brands
+    ]);
+}
+
+    public function update(Request $request, Car $car)
+    {
+        // Ellenőrizzük, hogy a felhasználó sajátja-e a hirdetés
+        if ($car->user_id !== auth()->id()) {
+            return redirect()->route('cars.index')->with('error', 'Nem módosíthatod más hirdetését!');
+        }
+
+        // Validáció
+        $validated = $request->validate([
+            'marka' => 'required',
+            'modell' => 'required',
+            'evjarat' => 'required|integer|min:1900|max:' . date('Y'),
+            'ar' => 'required|integer|min:100000',
+            'km_ora' => 'required|integer|min:0',
+            'teljesitmeny' => 'required|integer|min:1',
+            'uzemanyag' => 'required',
+            'valto' => 'required',
+            'szin' => 'required',
+            'karosszeria' => 'required',
+            'leiras' => 'required|min:10',
+            'images.*' => 'image|max:2048'
+        ]);
+
+        // Autó adatainak frissítése
+        $car->update([
+            'marka' => $validated['marka'],
+            'modell' => $validated['modell'],
+            'evjarat' => $validated['evjarat'],
+            'ar' => $validated['ar'],
+            'km_ora' => $validated['km_ora'],
+            'teljesitmeny' => $validated['teljesitmeny'],
+            'uzemanyag' => $validated['uzemanyag'],
+            'valto' => $validated['valto'],
+            'szin' => $validated['szin'],
+            'karosszeria' => $validated['karosszeria'],
+            'leiras' => $validated['leiras'],
+            'extrak' => $request->has('extrak') ? implode(',', $request->extrak) : null
+        ]);
+
+        // Új képek mentése
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $image) {
+                $path = $image->store('cars', 'public');
+                $car->images()->create([
+                    'path' => basename($path)
+                ]);
+            }
+        }
+
+        return redirect()
+            ->route('cars.show', $car)
+            ->with('success', 'Hirdetés sikeresen módosítva!');
+    }
+
+    // Új metódus kép törléshez
+    public function deleteImage($carId, $imageId)
+    {
+        $car = Car::findOrFail($carId);
+
+        if ($car->user_id !== auth()->id()) {
+            return redirect()->back()->with('error', 'Nem törölheted más hirdetésének képeit!');
+        }
+
+        $image = $car->images()->findOrFail($imageId);
+        Storage::disk('public')->delete('cars/' . $image->path);
+        $image->delete();
+
+        return redirect()->back()->with('success', 'Kép sikeresen törölve!');
+    }
+
+    public function myCars()
+{
+    $cars = Car::where('user_id', Auth::id())
+              ->orderBy('created_at', 'desc')
+              ->paginate(9);
+
+    return view('cars.my-cars', ['cars' => $cars]);
+}
+
+public function destroy(Car $car)
+{
+    if ($car->user_id !== Auth::id()) {
+        return redirect()->back()->with('error', 'Nem törölheted más hirdetését!');
+    }
+
+    // Képek törlése a storage-ból
+    foreach ($car->images as $image) {
+        Storage::disk('public')->delete('cars/' . $image->path);
+    }
+
+    $car->delete();
+    return redirect()->route('cars.my')->with('success', 'Hirdetés sikeresen törölve!');
+}
+
+public function userCars($userId)
+{
+    $user = User::findOrFail($userId);
+    $cars = Car::where('user_id', $userId)
+              ->orderBy('created_at', 'desc')
+              ->paginate(9);
+
+    return view('cars.user-cars', [
+        'cars' => $cars,
+        'user' => $user
+    ]);
+}
+
 }
 

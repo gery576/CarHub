@@ -1,29 +1,59 @@
 @extends('layout')
 @section('content')
-<main class="container pb-2">
-  <h1 class="text-center display-6 py-3">Belépés</h1>
-  <div class="card">
-    <div class="card-body">
-      <form action="/login" method="post">
-        @error('faild')
-          <div class="alert alert-danger"><p>{{ $message }}</p></div>
-        @enderror
-        @csrf
-        <div class="mb-3">
-          <label for="username" class="form-label">Felhasználónév:</label>
-          <input type="text" name="username" id="username" class="form-control" value="{{ old('username') }}">
-          @error('username')<p class="text-danger">{{ $message }}</p>@enderror
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-body">
+                    <h3 class="card-title text-center mb-4">
+                        <i class="fas fa-car text-primary me-2"></i>
+                        CarHub Bejelentkezés
+                    </h3>
+                    <form action="/login" method="POST">
+                        @csrf
+                        <div class="mb-3">
+                            <label class="form-label">Felhasználónév</label>
+                            <input type="text" name="username" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Jelszó</label>
+                            <input type="password" name="password" class="form-control" required>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">Belépek</button>
+                            <button type="button" class="btn btn-link" data-bs-toggle="modal" data-bs-target="#passwordReminder">
+                                Jelszóemlékeztető kérése
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
-        <div class="mb-3">
-          <label for="password" class="form-label">Jelszó:</label>
-          <input type="password" name="password" id="password" class="form-control">
-          @error('password')<p class="text-danger">{{ $message }}</p>@enderror
-        </div>
-        <div class="d-flex justify-content-center">
-          <button class="btn btn-dark" type="submit">Belépek</button>
-        </div>
-      </form>
     </div>
-  </div>
-</main>
+</div>
+
+<!-- Jelszóemlékeztető Modal -->
+<div class="modal fade" id="passwordReminder" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Jelszóemlékeztető kérése</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ route('password.remind') }}" method="POST">
+                @csrf
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Email cím</label>
+                        <input type="email" name="email" class="form-control" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bezár</button>
+                    <button type="submit" class="btn btn-primary">Küldés</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 @endsection
